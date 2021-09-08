@@ -313,13 +313,33 @@ a {
     }
   }
 
-  .linkedin:hover {
-    .circle {
+    .linkedin:hover {
+      .circle {
       animation: outWaveIn 1s cubic-bezier(0.42, 0, 0.58, 1) forwards,
         colorLinkedin 1s linear forwards;
     }
     .social-svg {
       fill: #007bb6;
+    }
+  }
+
+  .hackthebox:hover {
+    .circle {
+      animation: outWaveIn 1s cubic-bezier(0.42, 0, 0.58, 1) forwards,
+        colorHackTheBox 1s linear forwards;
+    }
+    .social-svg {
+      fill: #9FEF00;
+    }
+  }
+
+  .tryhackme:hover {
+    .circle {
+      animation: outWaveIn 1s cubic-bezier(0.42, 0, 0.58, 1) forwards,
+        colorTryHackMe 1s linear forwards;
+    }
+    .social-svg {
+      fill: #212C42;
     }
   }
 
@@ -368,6 +388,18 @@ a {
   @keyframes colorLinkedin {
     to {
       stroke: #007bb6;
+    }
+  }
+
+  @keyframes colorHackTheBox {
+    to {
+      stroke: #9FEF00;
+    }
+  }
+
+  @keyframes colorTryHackMe {
+    to {
+      stroke: #1a3354;
     }
   }
 
@@ -638,6 +670,18 @@ a {
   .linkedin:hover {
     .social-svg {
       fill: #007bb6;
+    }
+  }
+
+  .hackthebox:hover{
+    .social-svg{
+      fill: #9FEF00;
+    }
+  }
+
+  .tryhackme:hover {
+    .social-svg {
+      fill: #212C42;
     }
   }
 
