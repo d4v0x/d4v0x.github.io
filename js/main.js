@@ -5,6 +5,9 @@
 /* ── Plugin registration ──────────────────────────────── */
 gsap.registerPlugin(ScrollTrigger);
 
+/* ── Black-hole state (shared between particle system & HollowPurple) ── */
+window._bh = { state: 'normal', tx: 0, ty: 0 };
+
 /* ── Particles background (page-level) ─────────────────── */
 (function initParticles() {
   const canvas = document.getElementById('particles-bg');
@@ -28,20 +31,64 @@ gsap.registerPlugin(ScrollTrigger);
     this.y  = Math.random() * canvas.height;
     this.vx = (Math.random() - 0.5) * 0.55;
     this.vy = (Math.random() - 0.5) * 0.55;
-    this.r  = Math.random() * 1.8 + 0.8;
+    this.r     = Math.random() * 1.8 + 0.8;
+    this.baseR = this.r;
+    this.alpha = 1;
+    this.homeX  = this.x;  this.homeY  = this.y;
+    this.homeVx = this.vx; this.homeVy = this.vy;
   }
 
   Particle.prototype.update = function() {
-    this.x += this.vx;
-    this.y += this.vy;
-    if (this.x < 0 || this.x > canvas.width)  this.vx *= -1;
-    if (this.y < 0 || this.y > canvas.height)  this.vy *= -1;
+    const bh = window._bh;
+
+    if (!bh || bh.state === 'normal') {
+      /* ── Normal free-roam ── */
+      this.x += this.vx;
+      this.y += this.vy;
+      if (this.x < 0 || this.x > canvas.width)  this.vx *= -1;
+      if (this.y < 0 || this.y > canvas.height)  this.vy *= -1;
+      this.r = this.baseR; this.alpha = 1;
+      /* keep home in sync so return always goes back to last free position */
+      this.homeX = this.x; this.homeY = this.y;
+      this.homeVx = this.vx; this.homeVy = this.vy;
+
+    } else if (bh.state === 'absorbing') {
+      /* ── Black-hole pull + spiral ── */
+      const dx   = bh.tx - this.x;
+      const dy   = bh.ty - this.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const nx   = dx / dist, ny = dy / dist;
+      /* gravity: stronger as closer */
+      const pull = Math.min(0.9, 14 / (dist + 1));
+      this.vx += nx * pull;
+      this.vy += ny * pull;
+      /* tangential kick → spiral inward */
+      this.vx += (-ny) * 0.13;
+      this.vy += ( nx) * 0.13;
+      /* speed cap */
+      const spd = Math.hypot(this.vx, this.vy);
+      if (spd > 9) { this.vx *= 9 / spd; this.vy *= 9 / spd; }
+      this.x += this.vx;
+      this.y += this.vy;
+      /* fade & shrink as they reach center */
+      const t    = Math.max(0, Math.min(1, dist / 72));
+      this.alpha = t;
+      this.r     = this.baseR * t;
+
+    } else if (bh.state === 'returning') {
+      /* ── Exponential spring back to home ── */
+      this.x += (this.homeX - this.x) * 0.055;
+      this.y += (this.homeY - this.y) * 0.055;
+      this.alpha += (1 - this.alpha) * 0.06;
+      this.r      = this.baseR * this.alpha;
+    }
   };
 
   Particle.prototype.draw = function() {
+    if (this.alpha < 0.02 || this.r < 0.05) return;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-    ctx.fillStyle = DOT_COLOR + '0.55)';
+    ctx.fillStyle = DOT_COLOR + (0.55 * this.alpha).toFixed(2) + ')';
     ctx.fill();
   };
 
@@ -278,9 +325,8 @@ setInterval(() => {
   /* ── State machine ────────────────────────────────────── */
   const coreState     = { intensity: 0 };
   let   currentState  = 'idle';
-  let   isGravityBroken = false;
-  let   isAnimating   = false;
-  let   dwellTimer    = null;   // 2-second timer before gravity break
+  let   isAbsorbing   = false;   // true while black-hole effect is active
+  let   dwellTimer    = null;    // 2-second timer before absorb triggers
 
   /* ── Char split ───────────────────────────────────────── */
   function splitChars(selector) {
@@ -299,44 +345,57 @@ setInterval(() => {
   }
   splitChars('.hero-greeting, .hero-name, .alias-slash, .alias-handle');
 
-  /* ── Gravity animations ───────────────────────────────── */
-  function breakGravity() {
-    if (isGravityBroken || isAnimating) return;
-    isGravityBroken = true;
-    isAnimating     = true;
-    const chars = [...document.querySelectorAll(
-      '.hero-greeting .char, .hero-name .char, .alias-slash .char, .alias-handle .char'
-    )];
+  /* ── Black-hole animations ────────────────────────────── */
+  const CHAR_SEL = '.hero-greeting .char, .hero-name .char, .alias-slash .char, .alias-handle .char';
+
+  function absorbAll() {
+    if (isAbsorbing) return;
+    isAbsorbing = true;
+
+    /* point particles toward nucleus (fixed canvas → viewport coords) */
+    const cr = coreEl.getBoundingClientRect();
+    window._bh = {
+      state: 'absorbing',
+      tx: cr.left + cr.width  / 2,
+      ty: cr.top  + cr.height / 2,
+    };
+
+    /* animate each char toward nucleus center */
+    const chars = [...document.querySelectorAll(CHAR_SEL)];
     gsap.killTweensOf(chars);
-    gsap.to(chars, {
-      x:        () => (Math.random() - 0.5) * 240,
-      y:        () => (Math.random() - 0.5) * 180,
-      rotation: () => (Math.random() - 0.5) * 600,
-      opacity:  () => Math.random() * 0.3 + 0.05,
-      scale:    () => Math.random() * 0.5 + 0.15,
-      duration: 0.7,
-      ease:     'power3.out',
-      stagger:  { amount: 0.20, from: 'random' },
-      overwrite: 'auto',
-      onComplete() { isAnimating = false; },
+    chars.forEach(ch => {
+      const r  = ch.getBoundingClientRect();
+      const dx = window._bh.tx - (r.left + r.width  / 2);
+      const dy = window._bh.ty - (r.top  + r.height / 2);
+      gsap.to(ch, {
+        x: dx, y: dy,
+        scale: 0, opacity: 0,
+        duration: rnd(0.50, 0.95),
+        ease: 'power2.in',
+        delay: Math.random() * 0.30,
+        overwrite: 'auto',
+      });
     });
   }
 
-  function restoreGravity() {
-    if (!isGravityBroken || isAnimating) return;
-    isGravityBroken = false;
-    isAnimating     = true;
-    const chars = [...document.querySelectorAll(
-      '.hero-greeting .char, .hero-name .char, .alias-slash .char, .alias-handle .char'
-    )];
+  function restoreAll() {
+    if (!isAbsorbing) return;
+    isAbsorbing = false;
+
+    /* switch particles to spring-return mode */
+    window._bh = { state: 'returning', tx: window._bh.tx, ty: window._bh.ty };
+    /* after ~2 s they're close enough to home → resume normal */
+    setTimeout(() => { if (window._bh.state === 'returning') window._bh.state = 'normal'; }, 2000);
+
+    /* spring chars back to their natural positions */
+    const chars = [...document.querySelectorAll(CHAR_SEL)];
     gsap.killTweensOf(chars);
     gsap.to(chars, {
-      x: 0, y: 0, rotation: 0, opacity: 1, scale: 1,
-      duration: 1.0,
-      ease:     'elastic.out(1, 0.55)',
-      stagger:  { amount: 0.25, from: 'random' },
+      x: 0, y: 0, scale: 1, opacity: 1,
+      duration: 1.15,
+      ease: 'elastic.out(1, 0.55)',
+      stagger: { amount: 0.35, from: 'center' },
       overwrite: 'auto',
-      onComplete() { isAnimating = false; },
     });
   }
 
@@ -361,13 +420,13 @@ setInterval(() => {
       overwrite: 'auto',
     });
 
-    if (state === 'active' && !dwellTimer && !isGravityBroken) {
+    if (state === 'active' && !dwellTimer && !isAbsorbing) {
       dwellTimer = setTimeout(() => {
         dwellTimer = null;
-        if (currentState === 'active') breakGravity();
+        if (currentState === 'active') absorbAll();
       }, 2000);
     }
-    if (state === 'idle') restoreGravity();
+    if (state === 'idle') restoreAll();
   }
 
   let mRafId = null;
