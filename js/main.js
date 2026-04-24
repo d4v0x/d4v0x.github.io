@@ -53,21 +53,15 @@ window._bh = { state: 'normal', tx: 0, ty: 0 };
       this.homeVx = this.vx; this.homeVy = this.vy;
 
     } else if (bh.state === 'absorbing') {
-      /* ── Black-hole pull + spiral ── */
+      /* ── Direct inward pull — no tangential so they always converge ── */
       const dx   = bh.tx - this.x;
       const dy   = bh.ty - this.y;
       const dist = Math.hypot(dx, dy) || 1;
       const nx   = dx / dist, ny = dy / dist;
-      /* gravity: stronger as closer */
-      const pull = Math.min(0.9, 14 / (dist + 1));
-      this.vx += nx * pull;
-      this.vy += ny * pull;
-      /* tangential kick → spiral inward */
-      this.vx += (-ny) * 0.13;
-      this.vy += ( nx) * 0.13;
-      /* speed cap */
-      const spd = Math.hypot(this.vx, this.vy);
-      if (spd > 9) { this.vx *= 9 / spd; this.vy *= 9 / spd; }
+      /* speed proportional to distance: far → fast, near → slow & fade */
+      const targetSpd = Math.min(11, 1.2 + dist * 0.022);
+      this.vx = this.vx * 0.78 + nx * targetSpd * 0.22;
+      this.vy = this.vy * 0.78 + ny * targetSpd * 0.22;
       this.x += this.vx;
       this.y += this.vy;
       /* fade & shrink as they reach center */
@@ -76,13 +70,13 @@ window._bh = { state: 'normal', tx: 0, ty: 0 };
       this.r     = this.baseR * t;
 
     } else if (bh.state === 'returning') {
-      /* ── Exponential spring back to home ── */
-      this.x += (this.homeX - this.x) * 0.055;
-      this.y += (this.homeY - this.y) * 0.055;
+      /* ── Snappy expulsion back to home ── */
+      this.x += (this.homeX - this.x) * 0.10;
+      this.y += (this.homeY - this.y) * 0.10;
       /* restore velocity to original slow value so normal resumes calmly */
       this.vx += (this.homeVx - this.vx) * 0.09;
       this.vy += (this.homeVy - this.vy) * 0.09;
-      this.alpha += (1 - this.alpha) * 0.06;
+      this.alpha += (1 - this.alpha) * 0.09;
       this.r      = this.baseR * this.alpha;
     }
   };
