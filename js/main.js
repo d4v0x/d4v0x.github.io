@@ -52,22 +52,6 @@ gsap.registerPlugin(ScrollTrigger);
 
   function loop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // connections
-    for (let i = 0; i < particles.length; i++) {
-      for (let j = i + 1; j < particles.length; j++) {
-        const dx   = particles[i].x - particles[j].x;
-        const dy   = particles[i].y - particles[j].y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < MAX_DIST) {
-          ctx.strokeStyle = LINE_COLOR + ((1 - dist / MAX_DIST) * 0.14) + ')';
-          ctx.lineWidth   = 0.6;
-          ctx.beginPath();
-          ctx.moveTo(particles[i].x, particles[i].y);
-          ctx.lineTo(particles[j].x, particles[j].y);
-          ctx.stroke();
-        }
-      }
-    }
     particles.forEach(p => { p.update(); p.draw(); });
     requestAnimationFrame(loop);
   }
@@ -186,73 +170,6 @@ heroTl
   .to('.scroll-indicator',{ opacity: 1, duration: 0.4 },       1.35)
   .call(startTyping,      null,                                 1.1);
 
-/* ── Avatar: floating motion ─────────────────────────── */
-gsap.to('.avatar-wrapper', {
-  y: -16,
-  duration: 3.2,
-  ease: 'sine.inOut',
-  yoyo: true,
-  repeat: -1,
-});
-
-/* ── Domain rings rotation (center: 90px 132px) ─────── */
-gsap.to('.ring-outer', {
-  rotation: 360,
-  duration: 14,
-  ease: 'none',
-  repeat: -1,
-  transformOrigin: '90px 132px',
-});
-gsap.to('.ring-mid', {
-  rotation: -360,
-  duration: 20,
-  ease: 'none',
-  repeat: -1,
-  transformOrigin: '90px 132px',
-});
-gsap.to('.ring-inner', {
-  rotation: 360,
-  duration: 28,
-  ease: 'none',
-  repeat: -1,
-  transformOrigin: '90px 132px',
-});
-
-/* ── Infinity glyph gentle float ─────────────────────── */
-gsap.to('.infinity-glyph', {
-  y: -5,
-  opacity: 0.85,
-  duration: 2.5,
-  ease: 'sine.inOut',
-  yoyo: true,
-  repeat: -1,
-});
-
-/* ── Orbit dots (circular motion around 90, 132) ──────── */
-// od1: outer ring r≈82
-gsap.timeline({ repeat: -1 })
-  .to('.od1', { attr: { cx: 8,   cy: 132 }, duration: 3.5, ease: 'sine.inOut' })
-  .to('.od1', { attr: { cx: 90,  cy: 214 }, duration: 3.5, ease: 'sine.inOut' })
-  .to('.od1', { attr: { cx: 172, cy: 132 }, duration: 3.5, ease: 'sine.inOut' })
-  .to('.od1', { attr: { cx: 90,  cy: 50  }, duration: 3.5, ease: 'sine.inOut' })
-  .to('.od1', { attr: { cx: 8,   cy: 132 }, duration: 3.5, ease: 'sine.inOut' });
-
-// od2: mid ring r≈65
-gsap.timeline({ repeat: -1, delay: 2 })
-  .to('.od2', { attr: { cx: 90,  cy: 67  }, duration: 5, ease: 'sine.inOut' })
-  .to('.od2', { attr: { cx: 25,  cy: 132 }, duration: 5, ease: 'sine.inOut' })
-  .to('.od2', { attr: { cx: 90,  cy: 197 }, duration: 5, ease: 'sine.inOut' })
-  .to('.od2', { attr: { cx: 155, cy: 132 }, duration: 5, ease: 'sine.inOut' })
-  .to('.od2', { attr: { cx: 90,  cy: 67  }, duration: 5, ease: 'sine.inOut' });
-
-// od3: inner ring r≈50
-gsap.timeline({ repeat: -1, delay: 5 })
-  .to('.od3', { attr: { cx: 155, cy: 132 }, duration: 7, ease: 'sine.inOut' })
-  .to('.od3', { attr: { cx: 90,  cy: 197 }, duration: 7, ease: 'sine.inOut' })
-  .to('.od3', { attr: { cx: 25,  cy: 132 }, duration: 7, ease: 'sine.inOut' })
-  .to('.od3', { attr: { cx: 90,  cy: 67  }, duration: 7, ease: 'sine.inOut' })
-  .to('.od3', { attr: { cx: 155, cy: 132 }, duration: 7, ease: 'sine.inOut' });
-
 /* ── Timeline section header ─────────────────────────── */
 gsap.to('#timeline .section-header', {
   opacity: 1,
@@ -338,3 +255,584 @@ setInterval(() => {
     .to(name, { x: -2, duration: 0.05 })
     .to(name, { x:  0, duration: 0.05 });
 }, 7000);
+
+/* ══════════════════════════════════════════════════════════
+   HOLLOW PURPLE — Gojo's energy core easter egg
+   ══════════════════════════════════════════════════════════ */
+(function HollowPurple() {
+  'use strict';
+
+  /* ── Canvas setup ─────────────────────────────────────── */
+  const canvas = document.getElementById('core-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const SIZE = 420;
+  canvas.width  = SIZE;
+  canvas.height = SIZE;
+  const CX = SIZE / 2, CY = SIZE / 2;
+
+  /* ── Helpers ─────────────────────────────────────────── */
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function getR(iv)  { return 140 + iv * 58; }  // radius grows with intensity
+
+  /* ── State machine ────────────────────────────────────── */
+  const coreState     = { intensity: 0 };
+  let   currentState  = 'idle';
+  let   isGravityBroken = false;
+  let   isAnimating   = false;
+  let   dwellTimer    = null;   // 2-second timer before gravity break
+
+  /* ── Char split ───────────────────────────────────────── */
+  function splitChars(selector) {
+    document.querySelectorAll(selector).forEach(el => {
+      if (el.dataset.split) return;
+      el.dataset.split = '1';
+      const text = el.textContent;
+      el.textContent = '';
+      [...text].forEach(ch => {
+        const s = document.createElement('span');
+        s.className   = 'char';
+        s.textContent = ch === ' ' ? '\u00a0' : ch;
+        el.appendChild(s);
+      });
+    });
+  }
+  splitChars('.hero-greeting, .hero-name, .alias-slash, .alias-handle');
+
+  /* ── Gravity animations ───────────────────────────────── */
+  function breakGravity() {
+    if (isGravityBroken || isAnimating) return;
+    isGravityBroken = true;
+    isAnimating     = true;
+    const chars = [...document.querySelectorAll(
+      '.hero-greeting .char, .hero-name .char, .alias-slash .char, .alias-handle .char'
+    )];
+    gsap.killTweensOf(chars);
+    gsap.to(chars, {
+      x:        () => (Math.random() - 0.5) * 240,
+      y:        () => (Math.random() - 0.5) * 180,
+      rotation: () => (Math.random() - 0.5) * 600,
+      opacity:  () => Math.random() * 0.3 + 0.05,
+      scale:    () => Math.random() * 0.5 + 0.15,
+      duration: 0.7,
+      ease:     'power3.out',
+      stagger:  { amount: 0.20, from: 'random' },
+      overwrite: 'auto',
+      onComplete() { isAnimating = false; },
+    });
+  }
+
+  function restoreGravity() {
+    if (!isGravityBroken || isAnimating) return;
+    isGravityBroken = false;
+    isAnimating     = true;
+    const chars = [...document.querySelectorAll(
+      '.hero-greeting .char, .hero-name .char, .alias-slash .char, .alias-handle .char'
+    )];
+    gsap.killTweensOf(chars);
+    gsap.to(chars, {
+      x: 0, y: 0, rotation: 0, opacity: 1, scale: 1,
+      duration: 1.0,
+      ease:     'elastic.out(1, 0.55)',
+      stagger:  { amount: 0.25, from: 'random' },
+      overwrite: 'auto',
+      onComplete() { isAnimating = false; },
+    });
+  }
+
+  /* ── Mouse / state control ────────────────────────────── */
+  const coreEl = document.getElementById('energy-core');
+
+  function cancelDwell() {
+    if (dwellTimer) { clearTimeout(dwellTimer); dwellTimer = null; }
+  }
+
+  function setState(state) {
+    if (state === currentState) return;
+    currentState = state;
+
+    if (state !== 'active') cancelDwell();
+
+    const iv = { idle: 0, hover: 0.5, active: 1 }[state];
+    gsap.to(coreState, {
+      intensity: iv,
+      duration:  state === 'active' ? 0.30 : 0.65,
+      ease:      state === 'active' ? 'power3.in' : 'power2.inOut',
+      overwrite: 'auto',
+    });
+
+    if (state === 'active' && !dwellTimer && !isGravityBroken) {
+      dwellTimer = setTimeout(() => {
+        dwellTimer = null;
+        if (currentState === 'active') breakGravity();
+      }, 2000);
+    }
+    if (state === 'idle') restoreGravity();
+  }
+
+  let mRafId = null;
+  coreEl.addEventListener('mousemove', e => {
+    if (mRafId) return;
+    mRafId = requestAnimationFrame(() => {
+      mRafId = null;
+      const r   = coreEl.getBoundingClientRect();
+      const dx  = e.clientX - (r.left + r.width  / 2);
+      const dy  = e.clientY - (r.top  + r.height / 2);
+      const rad = Math.min(r.width, r.height) / 2;
+      const d   = Math.sqrt(dx * dx + dy * dy);
+      if      (d < rad * 0.22) setState('active');  // smaller core zone
+      else if (d < rad * 0.72) setState('hover');
+      else                     setState('idle');
+    });
+  });
+  coreEl.addEventListener('mouseleave', () => { cancelDwell(); setState('idle'); });
+
+  /* ═══════════════════════════════════════════════════════
+     RENDERING
+     Canvas draws everything: soft dark sphere body (gradient
+     fading to alpha=0 at edge = no hard border) + plasma
+     tendrils with bright-head → fading-trail effect.
+     ═══════════════════════════════════════════════════════ */
+
+  /* ── Sphere body ─────────────────────────────────────── */
+  function drawSphere(iv) {
+    const R  = getR(iv);
+
+    // Outer atmospheric corona
+    const corona = ctx.createRadialGradient(CX, CY, R * 0.6, CX, CY, R * 1.5);
+    corona.addColorStop(0,   `rgba(90, 15,190,${0.08 + iv * 0.15})`);
+    corona.addColorStop(0.5, `rgba(40,  5,100,${0.04 + iv * 0.08})`);
+    corona.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(CX, CY, R * 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = corona;
+    ctx.fill();
+
+    // Dark sphere body — MUST end at alpha=0 so no hard circle edge
+    const body = ctx.createRadialGradient(CX, CY, 0, CX, CY, R);
+    body.addColorStop(0,    `rgba(22, 4, 65, ${0.75 + iv * 0.18})`);
+    body.addColorStop(0.50, `rgba(10, 2, 38, ${0.80 + iv * 0.12})`);
+    body.addColorStop(0.80, `rgba( 4, 0, 16, ${0.62})`);
+    body.addColorStop(0.93, `rgba( 2, 0,  8, ${0.22})`);
+    body.addColorStop(1.00, 'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(CX, CY, R, 0, Math.PI * 2);
+    ctx.fillStyle = body;
+    ctx.fill();
+  }
+
+  /* ── Plasma Tendril System ───────────────────────────── */
+  /*
+   * Each tendril:
+   *   - has a "head" that wanders inside the sphere via random walk
+   *   - stores a trail of the last N positions
+   *   - drawn head-to-tail with bright→transparent + wide→thin
+   *   - blue tendrils bias left, red bias right, purple free
+   */
+
+  function makeTendril(ox, oy, color, sideX) {
+    return {
+      ox, oy,              // origin (near center)
+      color,               // [r, g, b]
+      sideX,               // -1 = pull left, +1 = pull right, 0 = free
+      hx: ox, hy: oy,      // head position
+      vx: rnd(-1.5, 1.5),
+      vy: rnd(-1.5, 1.5),
+      trail: [],
+      age: Math.floor(rnd(0, 60)),
+    };
+  }
+
+  function resetTendril(td) {
+    td.hx  = td.ox + rnd(-8, 8);
+    td.hy  = td.oy + rnd(-8, 8);
+    td.vx  = rnd(-2, 2);
+    td.vy  = rnd(-2, 2);
+    td.trail = [];
+    td.age = 0;
+  }
+
+  function updateTendril(td, iv) {
+    td.age++;
+
+    // Random acceleration (turbulence)
+    td.vx += rnd(-0.45, 0.45);
+    td.vy += rnd(-0.45, 0.45);
+
+    // Occasional sharp kick for electrical snapping
+    if (Math.random() < 0.04 + iv * 0.06) {
+      td.vx += rnd(-2.5, 2.5);
+      td.vy += rnd(-2.5, 2.5);
+    }
+
+    // Weak side bias (blue → left, red → right)
+    if (td.sideX !== 0) td.vx += td.sideX * (0.05 + iv * 0.08);
+
+    // Speed cap
+    const spd    = Math.sqrt(td.vx * td.vx + td.vy * td.vy);
+    const maxSpd = 2.8 + iv * 2.2;
+    if (spd > maxSpd) { td.vx *= maxSpd / spd; td.vy *= maxSpd / spd; }
+
+    td.hx += td.vx;
+    td.hy += td.vy;
+
+    // Sphere boundary push-back
+    const R    = getR(iv);
+    const maxD = R * (0.70 + iv * 0.18);
+    const dx   = td.hx - td.ox;
+    const dy   = td.hy - td.oy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > maxD) {
+      const nx = dx / dist, ny = dy / dist;
+      td.hx    = td.ox + nx * maxD;
+      td.hy    = td.oy + ny * maxD;
+      const dot = td.vx * nx + td.vy * ny;
+      td.vx   -= 2 * dot * nx * 0.55;
+      td.vy   -= 2 * dot * ny * 0.55;
+    }
+
+    // Record trail
+    td.trail.unshift({ x: td.hx, y: td.hy });
+    const maxLen = Math.floor(22 + iv * 55);
+    if (td.trail.length > maxLen) td.trail.pop();
+
+    // Reset after lifetime
+    if (td.age > 140 + Math.floor(rnd(0, 80))) resetTendril(td);
+  }
+
+  function drawTendril(td, iv, baseAlpha, baseWidth) {
+    if (td.trail.length < 2) return;
+    const [r, g, b] = td.color;
+    const alpha = baseAlpha * (0.55 + iv * 0.45);
+    const width = baseWidth * (0.7 + iv * 1.0);
+
+    for (let i = 0; i < td.trail.length - 1; i++) {
+      const frac = 1 - i / (td.trail.length - 1); // 1 at head, 0 at tail
+      const a    = alpha * Math.pow(frac, 1.5);
+      const w    = Math.max(0.3, width * frac);
+      if (a < 0.01) break;
+
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(${r},${g},${b},${a})`;
+      ctx.lineWidth   = w;
+      ctx.lineCap     = 'round';
+      ctx.moveTo(td.trail[i].x,     td.trail[i].y);
+      ctx.lineTo(td.trail[i + 1].x, td.trail[i + 1].y);
+      ctx.stroke();
+    }
+
+    // Glowing dot at head
+    if (td.trail.length > 0) {
+      const headA = alpha * 0.95;
+      const headR = 0.8 + iv * 2.0;
+      ctx.beginPath();
+      ctx.arc(td.trail[0].x, td.trail[0].y, headR, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${r},${g},${b},${headA})`;
+      ctx.shadowBlur  = 10 + iv * 12;
+      ctx.shadowColor = `rgba(${r},${g},${b},0.8)`;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  /* Create tendrils — blue (left), red (right), purple (active) */
+  const blueTendrils   = Array.from({ length: 5 }, () =>
+    makeTendril(CX - 12, CY, [80, 160, 255], -1)
+  );
+  const redTendrils    = Array.from({ length: 5 }, () =>
+    makeTendril(CX + 12, CY, [255, 80, 100], +1)
+  );
+  const purpleTendrils = Array.from({ length: 4 }, () =>
+    makeTendril(CX, CY, [200, 100, 255], 0)
+  );
+
+  /* Stagger initial ages so they don't all reset simultaneously */
+  [...blueTendrils, ...redTendrils, ...purpleTendrils].forEach((td, i) => {
+    td.age = i * 22;
+  });
+
+  /* ── Purple collision core ────────────────────────────── */
+  function drawCore(iv) {
+    const pR    = 18 + iv * 75;
+    const alpha = 0.25 + iv * 0.65;
+
+    // Outer purple nebula
+    const outer = ctx.createRadialGradient(CX, CY, 0, CX, CY, pR * 1.6);
+    outer.addColorStop(0,   `rgba(170, 70,255,${alpha * 0.55})`);
+    outer.addColorStop(0.4, `rgba(110, 30,200,${alpha * 0.28})`);
+    outer.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(CX, CY, pR * 1.6, 0, Math.PI * 2);
+    ctx.fillStyle = outer;
+    ctx.fill();
+
+    // Inner white-hot core
+    const inner = ctx.createRadialGradient(CX, CY, 0, CX, CY, pR * 0.50);
+    inner.addColorStop(0,    `rgba(255,245,255,${0.08 + iv * 0.86})`);
+    inner.addColorStop(0.28, `rgba(230,140,255,${0.05 + iv * 0.65})`);
+    inner.addColorStop(0.70, `rgba(160, 55,255,${0.02 + iv * 0.32})`);
+    inner.addColorStop(1,    'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(CX, CY, pR * 0.50, 0, Math.PI * 2);
+    ctx.fillStyle = inner;
+    ctx.fill();
+  }
+
+  /* ── Internal lightning ──────────────────────────────── */
+  function drawInternalLightning(iv) {
+    if (iv < 0.08) return;
+    const R     = getR(iv);
+    const count = Math.floor(2 + iv * 5);
+
+    for (let n = 0; n < count; n++) {
+      if (Math.random() > 0.28 + iv * 0.55) continue; // stochastic per bolt
+
+      const a1 = rnd(0, Math.PI * 2);
+      const a2 = a1 + rnd(0.7, 2.9);
+      const x1 = CX + Math.cos(a1) * rnd(4, R * 0.78);
+      const y1 = CY + Math.sin(a1) * rnd(4, R * 0.78);
+      const x2 = CX + Math.cos(a2) * rnd(4, R * 0.78);
+      const y2 = CY + Math.sin(a2) * rnd(4, R * 0.78);
+
+      const segs = 4 + Math.floor(rnd(0, 6));
+      const pts  = [{ x: x1, y: y1 }];
+      for (let s = 1; s < segs; s++) {
+        const f = s / segs;
+        pts.push({
+          x: x1 + (x2 - x1) * f + rnd(-22, 22),
+          y: y1 + (y2 - y1) * f + rnd(-22, 22),
+        });
+      }
+      pts.push({ x: x2, y: y2 });
+
+      const roll       = Math.random();
+      const [r, g, b]  = roll < 0.38
+        ? [155, 85, 255]    // purple
+        : roll < 0.68
+          ? [75, 145, 255]  // blue
+          : [255, 70, 100]; // red
+
+      const alpha = (0.18 + iv * 0.72) * (0.5 + Math.random() * 0.5);
+      ctx.save();
+      ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
+      ctx.lineWidth   = 0.6 + Math.random() * (1.0 + iv * 1.5);
+      ctx.lineCap     = 'round';
+      ctx.shadowBlur  = 8 + iv * 16;
+      ctx.shadowColor = `rgba(${r},${g},${b},${alpha * 0.8})`;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  /* ── Escape arcs — lightning that exits the sphere ───── */
+  const escapeArcs = [];
+
+  function spawnEscapeArc(R, iv) {
+    const angle    = rnd(0, Math.PI * 2);
+    const sx       = CX + Math.cos(angle) * (R * rnd(0.78, 0.95));
+    const sy       = CY + Math.sin(angle) * (R * rnd(0.78, 0.95));
+    const outAngle = angle + rnd(-0.5, 0.5);
+    const len      = rnd(18, 48 + iv * 90);
+    const segs     = 3 + Math.floor(rnd(0, 4));
+
+    const pts = [{ x: sx, y: sy }];
+    for (let s = 1; s <= segs; s++) {
+      const f = s / segs;
+      pts.push({
+        x: sx + Math.cos(outAngle) * len * f + rnd(-10, 10),
+        y: sy + Math.sin(outAngle) * len * f + rnd(-10, 10),
+      });
+    }
+
+    // Color: blue left hemisphere, red right, purple mix at active
+    const isLeft   = Math.cos(angle) < 0;
+    const roll     = Math.random();
+    const [r,g,b]  = (iv > 0.45 && roll < iv * 0.5)
+      ? [190, 90, 255]             // purple dominant at active
+      : isLeft
+        ? [80, 160, 255]           // blue
+        : [255, 75, 105];          // red
+
+    escapeArcs.push({
+      pts,
+      life:  1,
+      decay: rnd(0.10, 0.22),      // fast flash
+      r, g, b,
+      width: rnd(0.7, 1.8 + iv),
+      alpha: rnd(0.55, 0.95),
+    });
+  }
+
+  function updateDrawEscapeArcs(R, iv) {
+    // Spawn new arcs based on intensity
+    const chance = 0.022 + iv * 0.20;
+    if (Math.random() < chance) spawnEscapeArc(R, iv);
+
+    for (let i = escapeArcs.length - 1; i >= 0; i--) {
+      const arc = escapeArcs[i];
+      arc.life -= arc.decay;
+      if (arc.life <= 0) { escapeArcs.splice(i, 1); continue; }
+
+      const baseA = arc.alpha * arc.life;
+      ctx.save();
+      ctx.lineCap    = 'round';
+      ctx.shadowBlur = 10 + iv * 14;
+      ctx.shadowColor = `rgba(${arc.r},${arc.g},${arc.b},${baseA * 0.8})`;
+
+      for (let j = 0; j < arc.pts.length - 1; j++) {
+        const frac = 1 - j / (arc.pts.length - 1); // bright at origin, fades outward
+        const a    = baseA * Math.pow(frac, 1.3);
+        if (a < 0.01) break;
+        ctx.strokeStyle = `rgba(${arc.r},${arc.g},${arc.b},${a})`;
+        ctx.lineWidth   = arc.width * frac * arc.life;
+        ctx.beginPath();
+        ctx.moveTo(arc.pts[j].x,     arc.pts[j].y);
+        ctx.lineTo(arc.pts[j+1].x,   arc.pts[j+1].y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  /* ── Burst particles (gravity trigger) ───────────────── */
+  const burst = [];
+
+  function spawnBurst() {
+    for (let i = 0; i < 42; i++) {
+      const angle   = rnd(0, Math.PI * 2);
+      const speed   = rnd(0.8, 4.5);
+      const palette = [
+        [200,110,255], [90,145,255], [255,75,115],
+        [248,205,255], [135,55,255],
+      ];
+      const [r, g, b] = palette[Math.floor(rnd(0, palette.length))];
+      burst.push({
+        x: CX, y: CY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life:  1,
+        decay: rnd(0.012, 0.026),
+        size:  rnd(1.0, 3.5),
+        r, g, b,
+      });
+    }
+  }
+
+  function drawBurst() {
+    for (let i = burst.length - 1; i >= 0; i--) {
+      const p  = burst[i];
+      p.x     += p.vx; p.y += p.vy;
+      p.vx    *= 0.97; p.vy *= 0.97;
+      p.life  -= p.decay;
+      if (p.life <= 0) { burst.splice(i, 1); continue; }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${p.life.toFixed(2)})`;
+      ctx.fill();
+    }
+  }
+
+  /* ── Main render loop ─────────────────────────────────── */
+  let startTime   = null;
+  let lastStateSt = 'idle';
+
+  function render(ts) {
+    if (!startTime) startTime = ts;
+    const t  = (ts - startTime) / 1000;
+    const iv = coreState.intensity;
+
+    // Burst on first active frame
+    if (lastStateSt !== currentState) {
+      if (currentState === 'active') spawnBurst();
+      lastStateSt = currentState;
+    }
+
+    ctx.clearRect(0, 0, SIZE, SIZE);
+
+    // 1. Soft dark sphere body (gradient → alpha=0 at edge)
+    drawSphere(iv);
+
+    // 2. Blue plasma tendrils (visible at idle)
+    blueTendrils.forEach(td => {
+      updateTendril(td, iv);
+      drawTendril(td, iv, 0.75, 2.2);
+    });
+
+    // 3. Red plasma tendrils (visible at idle)
+    redTendrils.forEach(td => {
+      updateTendril(td, iv);
+      drawTendril(td, iv, 0.75, 2.2);
+    });
+
+    // 4. Purple tendrils — appear at hover, aggressive at active
+    if (iv > 0.15) {
+      const purpleIv = Math.max(0, (iv - 0.15) / 0.85);
+      purpleTendrils.forEach(td => {
+        updateTendril(td, iv);
+        drawTendril(td, purpleIv, 0.90, 3.0);
+      });
+    }
+
+    // 5. Internal lightning (visible from low intensity, chaotic at active)
+    drawInternalLightning(iv);
+
+    // 6. Purple collision core (always visible, expands at active)
+    drawCore(iv);
+
+    // 7. Escape arcs — bolts that shoot OUT of the sphere boundary
+    updateDrawEscapeArcs(getR(iv), iv);
+
+    // 8. Burst particles
+    drawBurst();
+
+    requestAnimationFrame(render);
+  }
+
+  requestAnimationFrame(render);
+
+})(); /* end HollowPurple */
+
+/* ── Social buttons: magnetic hover (GSAP) ─────────────── */
+(function socialHover() {
+  document.querySelectorAll('.social-btn').forEach(btn => {
+    let rect = null;
+
+    btn.addEventListener('mouseenter', () => {
+      rect = btn.getBoundingClientRect();
+      gsap.to(btn, {
+        scale: 1.08,
+        filter: 'drop-shadow(0 0 7px rgba(99,102,241,0.55))',
+        duration: 0.20,
+        ease: 'power2.out',
+        overwrite: 'auto',
+      });
+    });
+
+    btn.addEventListener('mousemove', e => {
+      if (!rect) return;
+      const mx = e.clientX - rect.left - rect.width  / 2;
+      const my = e.clientY - rect.top  - rect.height / 2;
+      gsap.to(btn, {
+        x: mx * 0.14,
+        y: my * 0.14,
+        duration: 0.18,
+        ease: 'power2.out',
+        overwrite: 'auto',
+      });
+    });
+
+    btn.addEventListener('mouseleave', () => {
+      rect = null;
+      gsap.to(btn, {
+        x: 0, y: 0, scale: 1,
+        filter: 'drop-shadow(0 0 0px rgba(99,102,241,0))',
+        duration: 0.55,
+        ease: 'elastic.out(1, 0.55)',
+        overwrite: 'auto',
+      });
+    });
+  });
+})();
