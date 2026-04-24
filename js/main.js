@@ -79,6 +79,9 @@ window._bh = { state: 'normal', tx: 0, ty: 0 };
       /* ── Exponential spring back to home ── */
       this.x += (this.homeX - this.x) * 0.055;
       this.y += (this.homeY - this.y) * 0.055;
+      /* restore velocity to original slow value so normal resumes calmly */
+      this.vx += (this.homeVx - this.vx) * 0.09;
+      this.vy += (this.homeVy - this.vy) * 0.09;
       this.alpha += (1 - this.alpha) * 0.06;
       this.r      = this.baseR * this.alpha;
     }
@@ -392,9 +395,9 @@ setInterval(() => {
     gsap.killTweensOf(chars);
     gsap.to(chars, {
       x: 0, y: 0, scale: 1, opacity: 1,
-      duration: 1.15,
-      ease: 'elastic.out(1, 0.55)',
-      stagger: { amount: 0.35, from: 'center' },
+      duration: 0.85,
+      ease: 'power3.out',
+      stagger: { amount: 0.25, from: 'center' },
       overwrite: 'auto',
     });
   }
