@@ -343,36 +343,46 @@ setInterval(() => {
   splitChars('.hero-greeting, .hero-name, .alias-slash, .alias-handle');
 
   /* ── Black-hole animations ────────────────────────────── */
-  const CHAR_SEL = '.hero-greeting .char, .hero-name .char, .alias-slash .char, .alias-handle .char';
+  const CHAR_SEL  = '.hero-greeting .char, .hero-name .char, .alias-slash .char, .alias-handle .char';
+  /* whole elements that fly as one unit toward the nucleus */
+  const BLOCK_SEL = '.nav-logo, .nav-link, #langToggle, .typing-wrapper, .social-btn, .btn-cv, .scroll-indicator';
+
+  function flyToNucleus(el, tx, ty) {
+    const r  = el.getBoundingClientRect();
+    const dx = tx - (r.left + r.width  / 2);
+    const dy = ty - (r.top  + r.height / 2);
+    gsap.to(el, {
+      x: dx, y: dy,
+      scale: 0, opacity: 0,
+      duration: rnd(0.50, 1.0),
+      ease: 'power2.in',
+      delay: Math.random() * 0.40,
+      overwrite: 'auto',
+    });
+  }
 
   function absorbAll() {
     if (isAbsorbing) return;
     isAbsorbing = true;
 
-    /* point particles toward nucleus (fixed canvas → viewport coords) */
+    /* nucleus center in viewport coords (particles canvas is fixed) */
     const cr = coreEl.getBoundingClientRect();
     window._bh = {
       state: 'absorbing',
       tx: cr.left + cr.width  / 2,
       ty: cr.top  + cr.height / 2,
     };
+    const { tx, ty } = window._bh;
 
-    /* animate each char toward nucleus center */
+    /* individual chars */
     const chars = [...document.querySelectorAll(CHAR_SEL)];
     gsap.killTweensOf(chars);
-    chars.forEach(ch => {
-      const r  = ch.getBoundingClientRect();
-      const dx = window._bh.tx - (r.left + r.width  / 2);
-      const dy = window._bh.ty - (r.top  + r.height / 2);
-      gsap.to(ch, {
-        x: dx, y: dy,
-        scale: 0, opacity: 0,
-        duration: rnd(0.50, 0.95),
-        ease: 'power2.in',
-        delay: Math.random() * 0.30,
-        overwrite: 'auto',
-      });
-    });
+    chars.forEach(ch => flyToNucleus(ch, tx, ty));
+
+    /* whole UI blocks */
+    const blocks = [...document.querySelectorAll(BLOCK_SEL)];
+    gsap.killTweensOf(blocks);
+    blocks.forEach(el => flyToNucleus(el, tx, ty));
   }
 
   function restoreAll() {
@@ -381,17 +391,26 @@ setInterval(() => {
 
     /* switch particles to spring-return mode */
     window._bh = { state: 'returning', tx: window._bh.tx, ty: window._bh.ty };
-    /* after ~2 s they're close enough to home → resume normal */
     setTimeout(() => { if (window._bh.state === 'returning') window._bh.state = 'normal'; }, 2000);
 
-    /* spring chars back to their natural positions */
+    /* restore chars */
     const chars = [...document.querySelectorAll(CHAR_SEL)];
     gsap.killTweensOf(chars);
     gsap.to(chars, {
       x: 0, y: 0, scale: 1, opacity: 1,
-      duration: 0.85,
-      ease: 'power3.out',
+      duration: 0.85, ease: 'power3.out',
       stagger: { amount: 0.25, from: 'center' },
+      overwrite: 'auto',
+    });
+
+    /* restore whole blocks */
+    const blocks = [...document.querySelectorAll(BLOCK_SEL)];
+    gsap.killTweensOf(blocks);
+    gsap.to(blocks, {
+      x: 0, y: 0, scale: 1, opacity: 1,
+      filter: 'drop-shadow(0 0 0px rgba(99,102,241,0))',
+      duration: 0.85, ease: 'power3.out',
+      stagger: { amount: 0.30, from: 'random' },
       overwrite: 'auto',
     });
   }
